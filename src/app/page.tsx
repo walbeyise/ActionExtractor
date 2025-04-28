@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { extractActionItems, type ExtractActionItemsOutput } from '@/ai/flows/extract-action-items';
 import { TranscriptUploader } from '@/components/transcript-uploader';
 import { ActionItemsDisplay } from '@/components/action-items-display';
+import { TextInputArea } from '@/components/text-input-area'; // Import the new component
 import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
@@ -12,19 +13,29 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleExtract = async (transcript: string) => {
+  const handleExtract = async (transcript: string, source: 'file' | 'text') => {
+    if (!transcript.trim()) {
+       toast({
+        variant: "destructive",
+        title: "Input Error",
+        description: `Please provide a transcript via ${source === 'file' ? 'file upload' : 'text input'}.`,
+      });
+      return;
+    }
+
     setIsLoading(true);
     setError(null); // Clear previous errors
     setExtractedActions(null); // Clear previous results
+
     try {
       const result = await extractActionItems({ transcript });
       setExtractedActions(result);
       toast({
         title: "Extraction Successful",
-        description: "Action items have been extracted.",
+        description: `Action items extracted from ${source === 'file' ? 'uploaded file' : 'text input'}.`,
       });
     } catch (err) {
-      console.error("Extraction failed:", err);
+      console.error(`Extraction from ${source} failed:`, err);
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred during extraction.";
       setError(errorMessage);
       toast({
@@ -43,14 +54,20 @@ export default function Home() {
         <header className="text-center">
           <h1 className="text-3xl md:text-4xl font-bold text-foreground">Action Extractor</h1>
           <p className="text-muted-foreground mt-2">
-            Upload your meeting transcript to automatically extract action items.
+            Upload a meeting transcript file or paste the text directly to automatically extract action items.
           </p>
         </header>
 
-        <TranscriptUploader onExtract={handleExtract} isLoading={isLoading} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <TranscriptUploader onExtract={(transcript) => handleExtract(transcript, 'file')} isLoading={isLoading} />
+          <TextInputArea onExtract={(transcript) => handleExtract(transcript, 'text')} isLoading={isLoading} />
+        </div>
+
 
         {(extractedActions || isLoading || error) && (
-          <ActionItemsDisplay actions={extractedActions} isLoading={isLoading} error={error} />
+           <div className="mt-8"> {/* Add margin top to separate from inputs */}
+            <ActionItemsDisplay actions={extractedActions} isLoading={isLoading} error={error} />
+           </div>
         )}
       </div>
     </main>

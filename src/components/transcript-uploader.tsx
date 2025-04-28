@@ -8,15 +8,22 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UploadCloud, FileText, Loader2 } from 'lucide-react';
 import mammoth from 'mammoth';
+import * as pdfjs from 'pdfjs-dist';
+
+// Set workerSrc for pdfjs
+if (typeof window !== 'undefined') {
+  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+}
 
 interface TranscriptUploaderProps {
   onExtract: (transcript: string) => void;
-  isLoading: boolean;
+  isLoading: boolean; // Use the global loading state passed from parent
 }
 
 export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false); // Local processing state
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -32,118 +39,123 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
         setSelectedFile(file);
         setFileError(null); // Clear error if file type is valid
       } else {
-        // Invalid file type
-        setSelectedFile(null); // Reset selected file
+        setSelectedFile(null);
         setFileError('Invalid file type. Please upload a .txt, .docx, or .pdf file.');
         if (fileInputRef.current) {
-          fileInputRef.current.value = ''; // Reset file input visually
+          fileInputRef.current.value = '';
         }
       }
     } else {
-      // No file selected (e.g., user cancelled)
       setSelectedFile(null);
-      setFileError(null); // Clear any previous error
+      setFileError(null);
     }
   };
 
-  const handleExtractClick = async () => {
+ const handleExtractClick = async () => {
     if (!selectedFile) {
       setFileError('Please select a transcript file first.');
       return;
     }
-    setFileError(null); // Clear error before processing
+    setFileError(null);
+    setIsProcessingFile(true); // Start local processing
 
     try {
-      if (selectedFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
+      let transcriptText = '';
+      const fileReader = new FileReader();
+
+      if (selectedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        fileReader.onload = async (e) => {
           const arrayBuffer = e.target?.result as ArrayBuffer;
           if (arrayBuffer) {
             try {
               const result = await mammoth.extractRawText({ arrayBuffer });
-              const text = result.value; // The raw text
-              onExtract(text);
+              transcriptText = result.value;
+              onExtract(transcriptText); // Call parent extract function
             } catch (mammothError) {
-               console.error("Error parsing DOCX with mammoth:", mammothError);
-               setFileError(`Could not parse the .docx file. Error: ${mammothError instanceof Error ? mammothError.message : 'Unknown parsing error'}`);
+              console.error("Error parsing DOCX with mammoth:", mammothError);
+              setFileError(`Could not parse the .docx file. Error: ${mammothError instanceof Error ? mammothError.message : 'Unknown parsing error'}`);
+            } finally {
+                 setIsProcessingFile(false); // End local processing
             }
           } else {
-             setFileError('Could not read the .docx file buffer.');
+            setFileError('Could not read the .docx file buffer.');
+             setIsProcessingFile(false); // End local processing
           }
         };
-        reader.onerror = () => {
+        fileReader.onerror = () => {
             setFileError('Error reading the .docx file.');
+            setIsProcessingFile(false); // End local processing
         };
-        reader.readAsArrayBuffer(selectedFile);
-
-      } else if (selectedFile.type === "text/plain") {
-        // Handle .txt file
-        const reader = new FileReader();
-        reader.onload = (e) => {
+        fileReader.readAsArrayBuffer(selectedFile);
+      } else if (selectedFile.type === 'text/plain') {
+        fileReader.onload = (e) => {
           const text = e.target?.result as string;
-          if (typeof text === 'string') {
-            onExtract(text);
-          } else {
-             setFileError('Could not read the .txt file.');
-          }
+           if (typeof text === 'string') {
+             transcriptText = text;
+             onExtract(transcriptText); // Call parent extract function
+           } else {
+              setFileError('Could not read the .txt file.');
+           }
+           setIsProcessingFile(false); // End local processing
         };
-         reader.onerror = () => {
+        fileReader.onerror = () => {
             setFileError('Error reading the .txt file.');
+             setIsProcessingFile(false); // End local processing
         };
-        reader.readAsText(selectedFile);
+        fileReader.readAsText(selectedFile);
       } else if (selectedFile.type === 'application/pdf') {
-        // Handle .pdf file
-        const reader = new FileReader();
-        reader.onload = async (e) => {
+        fileReader.onload = async (e) => {
             const typedArray = new Uint8Array(e.target?.result as ArrayBuffer);
             if (typedArray) {
                  try {
-                     // Dynamically import pdfjs-dist only when needed
-                    const pdfjsLib = await import('pdfjs-dist/build/pdf');
-                    // Set the worker source - adjust the path as needed, using a CDN is common
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
-                    const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+                    const pdf = await pdfjs.getDocument({ data: typedArray }).promise;
                     let fullText = '';
                     for (let i = 1; i <= pdf.numPages; i++) {
                         const page = await pdf.getPage(i);
                         const textContent = await page.getTextContent();
-                        fullText += textContent.items.map((item: any) => item.str).join(' ');
-                        fullText += '\n'; // Add newline between pages
+                        // Make sure item.str is treated as string and handle potential undefined/null
+                        const pageText = textContent.items.map((item: any) => String(item?.str || '')).join(' ');
+                        fullText += pageText + '\n'; // Add newline between pages
                     }
-                    onExtract(fullText.trim());
+                    transcriptText = fullText.trim();
+                    onExtract(transcriptText); // Call parent extract function
                  } catch (pdfError) {
                     console.error("Error parsing PDF:", pdfError);
                     setFileError(`Could not parse the .pdf file. Error: ${pdfError instanceof Error ? pdfError.message : 'Unknown PDF parsing error'}`);
+                 } finally {
+                     setIsProcessingFile(false); // End local processing
                  }
             } else {
                 setFileError('Could not read the .pdf file buffer.');
+                 setIsProcessingFile(false); // End local processing
             }
         };
-        reader.onerror = () => {
+        fileReader.onerror = () => {
             setFileError('Error reading the .pdf file.');
+             setIsProcessingFile(false); // End local processing
         };
-        reader.readAsArrayBuffer(selectedFile);
-
+        fileReader.readAsArrayBuffer(selectedFile);
       } else {
-         // Should not happen due to handleFileChange validation, but as a fallback
+         // Fallback, though validation should prevent this
          setFileError('Unsupported file type selected.');
+         setIsProcessingFile(false); // End local processing
       }
     } catch (error) {
         console.error("Error during file processing:", error);
         setFileError(`An error occurred processing the file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setIsProcessingFile(false); // End local processing in case of unexpected top-level error
     }
   };
 
 
   return (
-    <Card className="w-full max-w-lg mx-auto shadow-md">
+    <Card className="w-full shadow-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <UploadCloud className="text-primary" />
-          Upload Transcript
+          Upload Transcript File
         </CardTitle>
-        <CardDescription>Upload a plain text (.txt), Word (.docx), or PDF (.pdf) file containing the meeting transcript.</CardDescription>
+        <CardDescription>Upload a plain text (.txt), Word (.docx), or PDF (.pdf) file.</CardDescription>
         </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid w-full items-center gap-1.5">
@@ -151,12 +163,13 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
           <Input
             id="transcript-file"
             type="file"
-            accept=".txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf" // Ensure accept string matches validation
+            accept=".txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf"
             onChange={handleFileChange}
             ref={fileInputRef}
             className="file:text-primary file:font-medium hover:file:bg-primary/10"
             aria-invalid={!!fileError}
             aria-describedby="file-error-message"
+            disabled={isLoading || isProcessingFile} // Disable input while loading or processing
           />
           {selectedFile && (
             <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
@@ -165,14 +178,19 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
           )}
           {fileError && <p id="file-error-message" className="text-sm text-destructive mt-1">{fileError}</p>}
         </div>
-        <Button onClick={handleExtractClick} disabled={!selectedFile || isLoading} className="w-full">
-          {isLoading ? (
+        <Button
+            onClick={handleExtractClick}
+            // Disable button if no file is selected, or if global loading OR local processing is active
+            disabled={!selectedFile || isLoading || isProcessingFile}
+            className="w-full"
+        >
+          {isLoading || isProcessingFile ? ( // Show spinner if either global loading or local processing is active
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Extracting...
+              {isProcessingFile ? 'Processing...' : 'Extracting...'}
             </>
           ) : (
-            'Extract Action Items'
+            'Extract from File'
           )}
         </Button>
       </CardContent>
