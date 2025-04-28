@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UploadCloud, FileText, Loader2 } from 'lucide-react';
-// Note: docx processing requires additional libraries and setup (e.g., mammoth.js)
-// The current docx handling logic is basic and might not fully work without them.
+import mammoth from 'mammoth';
+
 
 interface TranscriptUploaderProps {
   onExtract: (transcript: string) => void;
@@ -52,27 +52,20 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
 
     try {
       if (selectedFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-        // Basic .docx handling (requires a library like mammoth.js for proper extraction)
-        // This is a placeholder and might not extract text correctly.
-        console.warn("Note: .docx extraction is basic and may require additional libraries.");
         const reader = new FileReader();
         reader.onload = async (e) => {
           const arrayBuffer = e.target?.result as ArrayBuffer;
           if (arrayBuffer) {
-            // You would typically use a library here to parse the ArrayBuffer
-            // For example, with mammoth.js:
-            // import mammoth from 'mammoth';
-            // const { value } = await mammoth.extractRawText({ arrayBuffer });
-            // onExtract(value);
-
-            // Placeholder: Trying to read as text might yield unreadable content
-            const textDecoder = new TextDecoder('utf-8');
-            const text = textDecoder.decode(arrayBuffer);
-            console.log("Attempted DOCX text extraction:", text.substring(0, 100)); // Log first 100 chars
-            // For now, pass a message indicating it was a docx
-            onExtract(`(Content from DOCX file: ${selectedFile.name} - requires proper parsing)`);
+            try {
+              const result = await mammoth.extractRawText({ arrayBuffer });
+              const text = result.value; // The raw text
+              onExtract(text);
+            } catch (mammothError) {
+               console.error("Error parsing DOCX with mammoth:", mammothError);
+               setFileError(`Could not parse the .docx file. Error: ${mammothError instanceof Error ? mammothError.message : 'Unknown parsing error'}`);
+            }
           } else {
-             setFileError('Could not read the .docx file.');
+             setFileError('Could not read the .docx file buffer.');
           }
         };
         reader.onerror = () => {
@@ -121,7 +114,7 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
           <Input
             id="transcript-file"
             type="file"
-            accept=".txt, .docx, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            accept=".txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" // Ensure accept string matches validation
             onChange={handleFileChange}
             ref={fileInputRef}
             className="file:text-primary file:font-medium hover:file:bg-primary/10"
