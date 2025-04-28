@@ -9,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { UploadCloud, FileText, Loader2 } from 'lucide-react';
 import mammoth from 'mammoth';
 
-
 interface TranscriptUploaderProps {
   onExtract: (transcript: string) => void;
   isLoading: boolean;
@@ -22,7 +21,11 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    const allowedFileTypes = ['text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const allowedFileTypes = [
+      'text/plain',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/pdf',
+    ];
 
     if (file) {
       if (allowedFileTypes.includes(file.type)) {
@@ -31,7 +34,7 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
       } else {
         // Invalid file type
         setSelectedFile(null); // Reset selected file
-        setFileError('Invalid file type. Please upload a .txt or .docx file.');
+        setFileError('Invalid file type. Please upload a .txt, .docx, or .pdf file.');
         if (fileInputRef.current) {
           fileInputRef.current.value = ''; // Reset file input visually
         }
@@ -88,6 +91,40 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
             setFileError('Error reading the .txt file.');
         };
         reader.readAsText(selectedFile);
+      } else if (selectedFile.type === 'application/pdf') {
+        // Handle .pdf file
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const typedArray = new Uint8Array(e.target?.result as ArrayBuffer);
+            if (typedArray) {
+                 try {
+                     // Dynamically import pdfjs-dist only when needed
+                    const pdfjsLib = await import('pdfjs-dist/build/pdf');
+                    // Set the worker source - adjust the path as needed, using a CDN is common
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+                    const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+                    let fullText = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        fullText += textContent.items.map((item: any) => item.str).join(' ');
+                        fullText += '\n'; // Add newline between pages
+                    }
+                    onExtract(fullText.trim());
+                 } catch (pdfError) {
+                    console.error("Error parsing PDF:", pdfError);
+                    setFileError(`Could not parse the .pdf file. Error: ${pdfError instanceof Error ? pdfError.message : 'Unknown PDF parsing error'}`);
+                 }
+            } else {
+                setFileError('Could not read the .pdf file buffer.');
+            }
+        };
+        reader.onerror = () => {
+            setFileError('Error reading the .pdf file.');
+        };
+        reader.readAsArrayBuffer(selectedFile);
+
       } else {
          // Should not happen due to handleFileChange validation, but as a fallback
          setFileError('Unsupported file type selected.');
@@ -106,7 +143,7 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
           <UploadCloud className="text-primary" />
           Upload Transcript
         </CardTitle>
-        <CardDescription>Upload a plain text (.txt) or Word (.docx) file containing the meeting transcript.</CardDescription>
+        <CardDescription>Upload a plain text (.txt), Word (.docx), or PDF (.pdf) file containing the meeting transcript.</CardDescription>
         </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid w-full items-center gap-1.5">
@@ -114,7 +151,7 @@ export function TranscriptUploader({ onExtract, isLoading }: TranscriptUploaderP
           <Input
             id="transcript-file"
             type="file"
-            accept=".txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" // Ensure accept string matches validation
+            accept=".txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf" // Ensure accept string matches validation
             onChange={handleFileChange}
             ref={fileInputRef}
             className="file:text-primary file:font-medium hover:file:bg-primary/10"
