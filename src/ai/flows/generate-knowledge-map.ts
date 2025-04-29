@@ -98,15 +98,15 @@ Instructions:
 3.  **Generate Textual Description ("mapDescription"):** Write a clear, concise summary of the analysis. Use Markdown for formatting (lists, bold). Highlight key relationships, assignments, deadlines, and potential themes.
 4.  **Generate Structured Data ("nodes" and "edges"):**
     -   **Nodes:** Create a list of nodes. Each node object must have:
-        -   `id`: The unique entity ID (e.g., 'person-jane_smith', 'action-1', 'timeline-next_week', 'topic-report_updates').
-        -   `type`: The category ('person', 'action', 'topic', 'timeline', 'context'). Create 'context' nodes if the context itself is a significant point of reference.
-        -   `label`: The display text (e.g., 'Jane Smith', 'Update Report', 'Next Week', 'Discuss Budget Allocation').
+        -   \`id\`: The unique entity ID (e.g., 'person-jane_smith', 'action-1', 'timeline-next_week', 'topic-report_updates').
+        -   \`type\`: The category ('person', 'action', 'topic', 'timeline', 'context'). Create 'context' nodes if the context itself is a significant point of reference.
+        -   \`label\`: The display text (e.g., 'Jane Smith', 'Update Report', 'Next Week', 'Discuss Budget Allocation').
     -   **Edges:** Create a list of edges connecting the nodes. Each edge object must have:
-        -   `id`: A unique edge ID (e.g., 'edge-assigner-action-0', 'edge-action-0-assignee', 'edge-action-0-timeline', 'edge-action-0-context').
-        -   `source`: The ID of the starting node.
-        -   `target`: The ID of the ending node.
-        -   `label`: (Optional) A short description of the relationship (e.g., 'assigns', 'assigned to', 'due', 'context', 'related topic').
-        -   `animated`: (Optional) Set to true for assignment edges (assigner -> action, action -> assignee).
+        -   \`id\`: A unique edge ID (e.g., 'edge-assigner-action-0', 'edge-action-0-assignee', 'edge-action-0-timeline', 'edge-action-0-context').
+        -   \`source\`: The ID of the starting node.
+        -   \`target\`: The ID of the ending node.
+        -   \`label\`: (Optional) A short description of the relationship (e.g., 'assigns', 'assigned to', 'due', 'context', 'related topic').
+        -   \`animated\`: (Optional) Set to true for assignment edges (assigner -> action, action -> assignee).
 
 Ensure the output is a valid JSON object strictly adhering to the KnowledgeMapOutputSchema structure, containing "mapDescription", "nodes", and "edges". If no relevant entities or relationships can be extracted, return empty lists for nodes/edges and an appropriate mapDescription. Base the map *only* on the provided action items.
 `,
