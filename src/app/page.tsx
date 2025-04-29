@@ -87,6 +87,8 @@ export default function Home() {
       setKnowledgeMap(null);
 
       try {
+          // Simulate API call delay if needed for testing loading state
+          // await new Promise(resolve => setTimeout(resolve, 1500));
           const result = await generateKnowledgeMap({ actionItems: extractedActions.actionItems });
           setKnowledgeMap(result);
            toast({
@@ -109,30 +111,33 @@ export default function Home() {
 
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 md:p-12 lg:p-24 bg-background">
-      <div className="w-full max-w-4xl space-y-8">
-        <header className="text-center">
+    <main className="flex min-h-screen flex-col items-center p-4 sm:p-8 lg:p-12 bg-background">
+      {/* Wider max-width container */}
+      <div className="w-full max-w-6xl space-y-8">
+        <header className="text-center mb-8">
           <h1 className="text-3xl md:text-4xl font-bold text-foreground">Action Extractor</h1>
           <p className="text-muted-foreground mt-2">
             Upload or paste a meeting transcript to extract action items and generate a knowledge map.
           </p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Input Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <TranscriptUploader onExtract={(transcript) => handleExtract(transcript, 'file')} isLoading={isLoadingActions} />
           <TextInputArea onExtract={(transcript) => handleExtract(transcript, 'text')} isLoading={isLoadingActions} />
         </div>
 
 
+        {/* Action Items Section */}
         {(extractedActions || isLoadingActions || actionsError) && (
-           <div className="mt-8">
+           <section aria-labelledby="action-items-heading" className="mt-8">
             <ActionItemsDisplay actions={extractedActions} isLoading={isLoadingActions} error={actionsError} />
-           </div>
+           </section>
         )}
 
-        {/* Knowledge Map Section */}
+        {/* Generate Map Button Section */}
         {extractedActions && extractedActions.actionItems.length > 0 && !actionsError && (
-            <div className="mt-8 text-center">
+            <div className="mt-8 text-center border-t pt-6">
                  <Button
                     onClick={handleGenerateMap}
                     disabled={isLoadingMap || isLoadingActions}
@@ -153,13 +158,13 @@ export default function Home() {
             </div>
         )}
 
+        {/* Knowledge Map Section */}
         {(knowledgeMap || isLoadingMap || mapError) && (
-             <div className="mt-8">
+             <section aria-labelledby="knowledge-map-heading" className="mt-8">
                 <KnowledgeMapDisplay map={knowledgeMap} isLoading={isLoadingMap} error={mapError} />
-             </div>
+             </section>
         )}
       </div>
     </main>
   );
 }
-
