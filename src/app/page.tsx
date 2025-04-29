@@ -1,16 +1,27 @@
+
 "use client";
 
 import { useState } from 'react';
 import { extractActionItems, type ExtractActionItemsOutput } from '@/ai/flows/extract-action-items';
+import { generateKnowledgeMap, type GenerateKnowledgeMapOutput } from '@/ai/flows/generate-knowledge-map'; // Import new flow
 import { TranscriptUploader } from '@/components/transcript-uploader';
 import { ActionItemsDisplay } from '@/components/action-items-display';
-import { TextInputArea } from '@/components/text-input-area'; // Import the new component
+import { TextInputArea } from '@/components/text-input-area';
+import { KnowledgeMapDisplay } from '@/components/knowledge-map-display'; // Import new component
+import { Button } from '@/components/ui/button'; // Import Button
 import { useToast } from "@/hooks/use-toast";
+import { Loader2, BrainCircuit } from 'lucide-react'; // Import icons
+
 
 export default function Home() {
   const [extractedActions, setExtractedActions] = useState<ExtractActionItemsOutput | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoadingActions, setIsLoadingActions] = useState(false);
+  const [actionsError, setActionsError] = useState<string | null>(null);
+
+  const [knowledgeMap, setKnowledgeMap] = useState<GenerateKnowledgeMapOutput | null>(null);
+  const [isLoadingMap, setIsLoadingMap] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
+
   const { toast } = useToast();
 
   const handleExtract = async (transcript: string, source: 'file' | 'text') => {
@@ -23,30 +34,79 @@ export default function Home() {
       return;
     }
 
-    setIsLoading(true);
-    setError(null); // Clear previous errors
-    setExtractedActions(null); // Clear previous results
+    setIsLoadingActions(true);
+    setActionsError(null);
+    setExtractedActions(null);
+    // Reset map state when extracting new actions
+    setKnowledgeMap(null);
+    setMapError(null);
+    setIsLoadingMap(false);
+
 
     try {
       const result = await extractActionItems({ transcript });
-      setExtractedActions(result);
-      toast({
-        title: "Extraction Successful",
-        description: `Action items extracted from ${source === 'file' ? 'uploaded file' : 'text input'}.`,
-      });
+      if (result.actionItems.length > 0) {
+        setExtractedActions(result);
+        toast({
+          title: "Extraction Successful",
+          description: `Action items extracted from ${source === 'file' ? 'uploaded file' : 'text input'}.`,
+        });
+      } else {
+        setExtractedActions({ actionItems: [] }); // Ensure state is updated even if empty
+         toast({
+          title: "Extraction Complete",
+          description: `No action items were found in the ${source === 'file' ? 'uploaded file' : 'text input'}.`,
+        });
+      }
     } catch (err) {
       console.error(`Extraction from ${source} failed:`, err);
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred during extraction.";
-      setError(errorMessage);
+      setActionsError(errorMessage);
       toast({
         variant: "destructive",
         title: "Extraction Failed",
         description: errorMessage,
       });
     } finally {
-      setIsLoading(false);
+      setIsLoadingActions(false);
     }
   };
+
+  const handleGenerateMap = async () => {
+      if (!extractedActions || extractedActions.actionItems.length === 0) {
+          toast({
+              variant: "destructive",
+              title: "Cannot Generate Map",
+              description: "No action items available to generate a knowledge map.",
+          });
+          return;
+      }
+
+      setIsLoadingMap(true);
+      setMapError(null);
+      setKnowledgeMap(null);
+
+      try {
+          const result = await generateKnowledgeMap({ actionItems: extractedActions.actionItems });
+          setKnowledgeMap(result);
+           toast({
+              title: "Knowledge Map Generated",
+              description: "Successfully generated the knowledge map.",
+          });
+      } catch (err) {
+          console.error("Knowledge map generation failed:", err);
+          const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred during map generation.";
+          setMapError(errorMessage);
+          toast({
+              variant: "destructive",
+              title: "Map Generation Failed",
+              description: errorMessage,
+          });
+      } finally {
+          setIsLoadingMap(false);
+      }
+  };
+
 
   return (
     <main className="flex min-h-screen flex-col items-center p-6 md:p-12 lg:p-24 bg-background">
@@ -54,22 +114,52 @@ export default function Home() {
         <header className="text-center">
           <h1 className="text-3xl md:text-4xl font-bold text-foreground">Action Extractor</h1>
           <p className="text-muted-foreground mt-2">
-            Upload a meeting transcript file or paste the text directly to automatically extract action items.
+            Upload or paste a meeting transcript to extract action items and generate a knowledge map.
           </p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <TranscriptUploader onExtract={(transcript) => handleExtract(transcript, 'file')} isLoading={isLoading} />
-          <TextInputArea onExtract={(transcript) => handleExtract(transcript, 'text')} isLoading={isLoading} />
+          <TranscriptUploader onExtract={(transcript) => handleExtract(transcript, 'file')} isLoading={isLoadingActions} />
+          <TextInputArea onExtract={(transcript) => handleExtract(transcript, 'text')} isLoading={isLoadingActions} />
         </div>
 
 
-        {(extractedActions || isLoading || error) && (
-           <div className="mt-8"> {/* Add margin top to separate from inputs */}
-            <ActionItemsDisplay actions={extractedActions} isLoading={isLoading} error={error} />
+        {(extractedActions || isLoadingActions || actionsError) && (
+           <div className="mt-8">
+            <ActionItemsDisplay actions={extractedActions} isLoading={isLoadingActions} error={actionsError} />
            </div>
+        )}
+
+        {/* Knowledge Map Section */}
+        {extractedActions && extractedActions.actionItems.length > 0 && !actionsError && (
+            <div className="mt-8 text-center">
+                 <Button
+                    onClick={handleGenerateMap}
+                    disabled={isLoadingMap || isLoadingActions}
+                    size="lg"
+                 >
+                    {isLoadingMap ? (
+                        <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            Generating Map...
+                        </>
+                    ) : (
+                         <>
+                            <BrainCircuit className="mr-2 h-5 w-5" />
+                            Generate Knowledge Map
+                         </>
+                    )}
+                </Button>
+            </div>
+        )}
+
+        {(knowledgeMap || isLoadingMap || mapError) && (
+             <div className="mt-8">
+                <KnowledgeMapDisplay map={knowledgeMap} isLoading={isLoadingMap} error={mapError} />
+             </div>
         )}
       </div>
     </main>
   );
 }
+
