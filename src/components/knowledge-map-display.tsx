@@ -17,6 +17,7 @@ import ReactFlow, {
   type Node,
   type Edge,
   Panel,
+  MarkerType // Import MarkerType
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Button } from './ui/button';
@@ -110,6 +111,9 @@ export function KnowledgeMapDisplay({ map, isLoading, error }: KnowledgeMapDispl
             label: e.label,
             animated: e.animated,
             type: 'smoothstep', // Default edge type
+            markerEnd: { // Add arrow marker to the end of the edge
+              type: MarkerType.ArrowClosed,
+            },
         } as Edge)); // Cast to Edge type
     }, [map?.edges]);
 
@@ -211,3 +215,4 @@ export function KnowledgeMapDisplay({ map, isLoading, error }: KnowledgeMapDispl
     </Card>
   );
 }
+
